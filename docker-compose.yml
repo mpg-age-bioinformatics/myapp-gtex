@@ -1,0 +1,198 @@
+version: '3.7'
+
+services:
+
+ init:
+  container_name: init
+  image: mpgagebioinformatics/myapp:latest
+  user: root
+  entrypoint: /myapp/services/init/entrypoint.sh
+  volumes:
+    - data:/myapp_data/users
+    - ~/myapp_backup/stats:/backup/stats
+    - ~/myapp_backup/users_data:/backup/users_data:ro
+    - ~/myapp_backup/mariadb:/backup/mariadb:ro
+  environment:
+    - APP_NAME=myapp
+    - FLASK_ENV=init
+    - RESTORE_DB=0
+    - RESTORE_USERS_DATA=0
+    - DB_NAME=myapp
+    - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    - SECRET_KEY=${SECRET_KEY}
+    - REDIS_ADDRESS=redis:6379/0
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+    - MYSQL_USER=myapp
+    - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    - MYSQL_HOST=mariadb
+    - MYSQL_PORT=3306
+    - ADMINS=jboucas@gmail.com
+  links:
+    - mariadb
+  depends_on:
+    - mariadb
+
+ server:
+  container_name: server
+  image: mpgagebioinformatics/myapp:latest
+  restart: always
+  volumes:
+   - data:/myapp_data/users
+   - ./_vars.py:/myapp/myapp/routes/_vars.py
+  environment:
+   - N_WORKERS=1
+   - APP_NAME=myapp
+   - APP_TITLE=myapp
+   - DB_NAME=myapp
+   - APP_URL=https://myapp.localhost
+   - LOGS=/var/log/myapp/
+   - SECRET_KEY=${SECRET_KEY}
+   - REDIS_ADDRESS=redis:6379/0
+   - REDIS_PASSWORD=${REDIS_PASSWORD}
+   - MYSQL_USER=myapp
+   - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+   - MYSQL_HOST=mariadb
+   - MYSQL_PORT=3306
+   - FLASK_ENV=production
+   - INSTANCE=(DEV)
+   - ADMINS=jboucas@gmail.com
+   - MAIL_USERNAME=jboucas@gmail.com
+  #  - MAIL_PORT=465 # comment if using the dev server
+  #  - MAIL_USE_TLS=1 # comment if using the dev server
+  labels:
+   - traefik.http.services.server.loadbalancer.server.port=8000
+   - traefik.http.middlewares.server.redirectscheme.scheme=https
+   - traefik.http.routers.server.entrypoints=web
+   - traefik.http.routers.server.rule=Host(`myapp.localhost`)
+   - traefik.http.routers.server.middlewares=server_https@docker
+   - traefik.http.routers.server_https.rule=Host(`myapp.localhost`)
+   - traefik.http.routers.server_https.tls=true
+   - traefik.http.routers.server_https.entrypoints=websecure
+  links:
+   - mariadb
+   - redis
+  depends_on:
+   - init
+   - mariadb
+   - redis
+
+ demoapp:
+  container_name: demoapp
+  image: mpgagebioinformatics/myapp:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: always
+  volumes:
+   - data:/myapp_data/users
+   - ./_vars.py:/myapp/myapp/routes/_vars.py
+   - ./app.py:/myapp/myapp/routes/index.py
+  environment:
+   - N_WORKERS=1
+   - APP_NAME=myapp
+   - APP_TITLE=myapp
+   - DB_NAME=myapp
+   - APP_URL=https://myapp.localhost/demo
+   - PAGE_PREFIX=/demo
+   - LOGS=/var/log/myapp/
+   - SECRET_KEY=${SECRET_KEY}
+   - REDIS_ADDRESS=redis:6379/0
+   - REDIS_PASSWORD=${REDIS_PASSWORD}
+   - MYSQL_USER=myapp
+   - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+   - MYSQL_HOST=mariadb
+   - MYSQL_PORT=3306
+   - FLASK_ENV=production
+   - INSTANCE=(DEV)
+   - ADMINS=jboucas@gmail.com
+   - MAIL_USERNAME=jboucas@gmail.com
+  #  - MAIL_PORT=465 # comment if using the dev server
+  #  - MAIL_USE_TLS=1 # comment if using the dev server
+  labels:
+   - traefik.http.services.demoapp.loadbalancer.server.port=8000
+   - traefik.http.middlewares.demoapp_https.redirectscheme.scheme=https
+   - traefik.http.routers.demoapp.entrypoints=web
+   - traefik.http.routers.demoapp.rule=Host(`myapp.localhost`) && PathPrefix(`/demo`)
+   - traefik.http.routers.demoapp.middlewares=demoapp_https@docker
+   - traefik.http.routers.demoapp_https.rule=Host(`myapp.localhost`) && PathPrefix(`/demo`)
+   - traefik.http.routers.demoapp_https.tls=true
+   - traefik.http.routers.demoapp_https.entrypoints=websecure
+  links:
+   - mariadb
+   - redis
+  depends_on:
+   - init
+   - mariadb
+   - redis
+
+ backup:
+  container_name: backup
+  image: mpgagebioinformatics/myapp:latest
+  user: root
+  entrypoint: /myapp/services/backup/entrypoint.sh
+  depends_on:
+   - mariadb
+   - init
+  volumes:
+   - ~/myapp_backup/mariadb:/backup/mariadb
+   - ~/myapp_backup/users_data:/backup/users_data
+   - data:/myapp_data/users:ro
+  environment:
+   - APP_NAME=myapp
+   - APP_TITLE=myapp
+   - DB_NAME=myapp
+   - MYSQL_USER=myapp
+   - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+   - MYSQL_HOST=mariadb
+   - MYSQL_PORT=3306
+   - MAX_BACKUPS=15
+   - INIT_BACKUP=0
+   # Every day at 03:00
+   - CRON_TIME=44 13 * * *
+   - FLASK_ENV=backup
+  restart: unless-stopped
+  links:
+   - mariadb
+
+ mariadb:
+  container_name: mariadb
+  image: mariadb:10.5
+  restart: always
+  volumes:
+   - db:/var/lib/mysql
+  environment:
+   - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+
+ redis:
+  container_name: redis
+  image: redis:7
+  restart: always
+  command: redis-server --requirepass ${REDIS_PASSWORD}
+
+ reverse-proxy:
+  image: traefik:v2.6
+  command: 
+    - --api.insecure=true
+    - --providers.docker=true
+    - --entrypoints.websecure.address=:443
+    - --entrypoints.web.address=:80
+    # - --providers.file.filename=/etc/traefik/dynamic_conf/conf.yml
+    # - --providers.file.watch=true
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes:
+    # - ~/flaski23/certificates/:/tools/certs
+    # - ./services/traefik/config.yml:/etc/traefik/dynamic_conf/conf.yml:ro
+    - /var/run/docker.sock:/var/run/docker.sock
+  labels:
+    - traefik.enable=false
+  depends_on:
+  # - server
+  - demoapp
+
+volumes:
+ data:
+  external: false
+ db:
+  external: false
