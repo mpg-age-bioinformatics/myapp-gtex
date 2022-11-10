@@ -188,7 +188,7 @@ services:
   labels:
     - traefik.enable=false
   depends_on:
-  # - server
+  - server
   - demoapp
 
 volumes:
