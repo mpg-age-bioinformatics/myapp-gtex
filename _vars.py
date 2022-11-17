@@ -2,7 +2,7 @@ import os
 
 _PRIVATE_ROUTES=['demo']
 _PUBLIC_VIEWS=[]
-_META_TAGS={}
+_META_TAGS=[]
 
 
 user_navbar_links={
