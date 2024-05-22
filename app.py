@@ -30,7 +30,7 @@ def make_layout(pathname):
                 dbc.Row( 
                     dbc.Col(
                         [
-                            html.H1("Simple demo on how to add an app as an individual container.")
+                            html.H1("Simple demo on how to add an app as an individual container.\nMy first changes.")
                         ],
                         align="center",
                     ),

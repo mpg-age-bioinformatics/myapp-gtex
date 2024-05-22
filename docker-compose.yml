@@ -17,6 +17,7 @@ services:
     - FLASK_ENV=init
     - RESTORE_DB=0
     - RESTORE_USERS_DATA=0
+    - UPGRADE_DB=1
     - DB_NAME=myapp
     - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
     - SECRET_KEY=${SECRET_KEY}
@@ -53,7 +54,7 @@ services:
    - MYSQL_PASSWORD=${MYSQL_PASSWORD}
    - MYSQL_HOST=mariadb
    - MYSQL_PORT=3306
-   - FLASK_ENV=production
+   - FLASK_ENV=development
    - INSTANCE=(DEV)
    - ADMINS=jboucas@gmail.com
    - MAIL_USERNAME=jboucas@gmail.com
@@ -102,7 +103,7 @@ services:
    - MYSQL_PASSWORD=${MYSQL_PASSWORD}
    - MYSQL_HOST=mariadb
    - MYSQL_PORT=3306
-   - FLASK_ENV=production
+   - FLASK_ENV=development
    - INSTANCE=(DEV)
    - ADMINS=jboucas@gmail.com
    - MAIL_USERNAME=jboucas@gmail.com
