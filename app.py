@@ -25,7 +25,7 @@ dashapp.layout=html.Div( [
 def make_layout(pathname):
     protected_content=html.Div(
         [
-            make_navbar_logged("Demo App",current_user),
+            make_navbar_logged("gtex",current_user),
             dbc.Container(
                 dbc.Row( 
                     dbc.Col(

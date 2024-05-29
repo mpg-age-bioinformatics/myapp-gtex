@@ -91,10 +91,10 @@ services:
   environment:
    - N_WORKERS=1
    - APP_NAME=myapp
-   - APP_TITLE=myapp
+   - APP_TITLE=gtex
    - DB_NAME=myapp
-   - APP_URL=https://myapp.localhost/demo
-   - PAGE_PREFIX=/demo
+   - APP_URL=https://myapp.localhost/gtex
+   - PAGE_PREFIX=/gtex
    - LOGS=/var/log/myapp/
    - SECRET_KEY=${SECRET_KEY}
    - REDIS_ADDRESS=redis:6379/0
@@ -113,9 +113,9 @@ services:
    - traefik.http.services.demoapp.loadbalancer.server.port=8000
    - traefik.http.middlewares.demoapp_https.redirectscheme.scheme=https
    - traefik.http.routers.demoapp.entrypoints=web
-   - traefik.http.routers.demoapp.rule=Host(`myapp.localhost`) && PathPrefix(`/demo`)
+   - traefik.http.routers.demoapp.rule=Host(`myapp.localhost`) && PathPrefix(`/gtex`)
    - traefik.http.routers.demoapp.middlewares=demoapp_https@docker
-   - traefik.http.routers.demoapp_https.rule=Host(`myapp.localhost`) && PathPrefix(`/demo`)
+   - traefik.http.routers.demoapp_https.rule=Host(`myapp.localhost`) && PathPrefix(`/gtex`)
    - traefik.http.routers.demoapp_https.tls=true
    - traefik.http.routers.demoapp_https.entrypoints=websecure
   links:

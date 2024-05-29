@@ -1,13 +1,13 @@
 import os
 
-_PRIVATE_ROUTES=['demo']
+_PRIVATE_ROUTES=['gtex']
 _PUBLIC_VIEWS=[]
 _META_TAGS=[]
 
 
 user_navbar_links={
     "Home":"https://myapp.localhost",\
-    "DemoApp":"https://myapp.localhost/demo/",\
+    "gtex":"https://myapp.localhost/gtex/",\
     "Storage":"/storage/",\
     "separator_1":"-",\
     "General":"__title__",\
