@@ -79,7 +79,7 @@ services:
 
  gtex:
   container_name: gtex
-  image: mpgagebioinformatics/myapp:latest
+  image: mpgagebioinformatics/flaski:latest
   build:
     context: .
     dockerfile: Dockerfile
