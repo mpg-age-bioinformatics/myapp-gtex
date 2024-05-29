@@ -77,8 +77,8 @@ services:
    - mariadb
    - redis
 
- demoapp:
-  container_name: demoapp
+ gtex:
+  container_name: gtex
   image: mpgagebioinformatics/myapp:latest
   build:
     context: .
@@ -88,6 +88,7 @@ services:
    - data:/myapp_data/users
    - ./_vars.py:/myapp/myapp/routes/_vars.py
    - ./app.py:/myapp/myapp/routes/index.py
+   - ./_app.py:/myapp/myapp/routes/_app.py
   environment:
    - N_WORKERS=1
    - APP_NAME=myapp
@@ -190,7 +191,7 @@ services:
     - traefik.enable=false
   depends_on:
   - server
-  - demoapp
+  - gtex
 
 volumes:
  data:
