@@ -33,9 +33,10 @@ def read_gene_expression(cache,path_to_files=path_to_files):
 def read_genes(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2)
     def _read_genes(path_to_files=path_to_files):
-        df=pd.read_csv(path_to_files+"genes.tsv",sep="\t")
+        df=pd.read_csv(path_to_files+"genes-gtex.tsv",sep="\t")
         return df.to_json()
     return pd.read_json(_read_genes())
+
 
 def read_significant_genes(cache, path_to_files=path_to_files):
     @cache.memoize(60*60*2)
