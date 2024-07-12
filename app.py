@@ -171,6 +171,7 @@ def make_layout(session_id):
     )
     return protected_content
 
+
 ## all callback elements with `State` will be updated only once submit is pressed
 ## all callback elements wiht `Input` will be updated everytime the value gets changed 
 @dashapp.callback(
@@ -187,7 +188,9 @@ def make_layout(session_id):
 def update_output(session_id, n_clicks, datasets, groups, samples, genenames, geneids, download_name):
     selected_results_files, ids2labels=filter_samples(datasets=datasets,groups=groups, reps=samples, cache=cache)    
     
+    print('update_output')
     ## samples
+    #result_files_path=selected_results_files[]
     results_files=selected_results_files[["Set","Group","Reps"]]
     results_files.columns=["Set","Group","Sample"]
     results_files=results_files.drop_duplicates()      
@@ -199,29 +202,38 @@ def update_output(session_id, n_clicks, datasets, groups, samples, genenames, ge
         ]
     )
 
+    download_geneexp=html.Div( 
+    [
+        html.Button(id='btn-geneexp', n_clicks=0, children='Download', style={"margin-top":4, 'background-color': "#5474d8", "color":"white"}),
+                #dcc.Download(id="download-geneexp")
+    ]
+    )
+
     ## gene expression
-    if datasets or groups or samples or  genenames or  geneids :
+    #if datasets or groups or samples or  genenames or  geneids :
         # print("1 -- gene expression")
-        gene_expression=filter_gene_expression(ids2labels,genenames,geneids,cache)
+       # gene_expression=filter_gene_expression(ids2labels,genenames,geneids,cache)
         
-        gene_expression_=make_table(gene_expression,"gene_expression")#,fixed_columns={'headers': True, 'data': 2} )
-        download_geneexp=html.Div( 
-            [
-                html.Button(id='btn-geneexp', n_clicks=0, children='Download', style={"margin-top":4, 'background-color': "#5474d8", "color":"white"}),
-                dcc.Download(id="download-geneexp")
-            ]
-        )
-        gene_expression_bol=True
-    else:
-        gene_expression_bol=False
+        #gene_expression_=make_table(gene_expression,"gene_expression")#,fixed_columns={'headers': True, 'data': 2} )
+        #download_geneexp=html.Div( 
+            #[
+                #html.Button(id='btn-geneexp', n_clicks=0, children='Download', style={"margin-top":4, 'background-color': "#5474d8", "color":"white"}),
+                #dcc.Download(id="download-geneexp")
+            #]
+        #)
+        #gene_expression_bol=True
+    #else:
+    gene_expression_bol=False
+
+
 
     ## barPlot
     selected_sets=list(set(results_files["Set"]))
     if (genenames and len(genenames) == 1) or (geneids and len(geneids) == 1):
         # print("2 -- bar plot")
 
-        gene_expression=filter_gene_expression(ids2labels,genenames,geneids,cache)
-        
+        gene_expression=filter_gene_expression(selected_results_files[['File']],ids2labels,genenames,geneids,cache)
+        gene_expression_=make_table(gene_expression,"gene_expression")#,fixed_columns={'headers': True, 'data': 2} )
         bar_df=gene_expression
         if genenames:
             label=genenames[0]
@@ -241,13 +253,13 @@ def update_output(session_id, n_clicks, datasets, groups, samples, genenames, ge
         ])      
         gene_expression_bar_bol=True
     else:
-        gene_expression_bar_bol=False
+        gene_expression_bar_bol=False 
 
-    ## PCA
+     ## PCA
     selected_sets=list(set(selected_results_files["Set"]))
     if len(selected_sets) == 1 : 
         # print("3 -- PCA")
-        pca_data=filter_gene_expression(ids2labels,None,None,cache)
+        pca_data=filter_gene_expression(results_files, ids2labels,None,None,cache)
         pca_plot, pca_pa, pca_df=make_pca_plot(pca_data,selected_sets[0])
         pca_config={ 'toImageButtonOptions': { 'format': 'svg', 'filename': download_name+".pca" }}
         pca_plot=dcc.Graph(figure=pca_plot, config=pca_config, style={"width":"100%","overflow-x":"auto"})
@@ -263,7 +275,7 @@ def update_output(session_id, n_clicks, datasets, groups, samples, genenames, ge
         ])
                 
         pca_bol=True
-    else:
+    else: 
         pca_bol=False
     
     ## differential gene expression
@@ -837,9 +849,13 @@ def ma_to_iscatterplot(n_clicks,datasets, groups, genenames, geneids):
     prevent_initial_call=True,
 )
 def pca_to_iscatterplot(n_clicks,datasets, groups):
+    results_files=selected_results_files[["Set","Group","Reps"]]
+    results_files.columns=["Set","Group","Sample"]
+    results_files=results_files.drop_duplicates()      
+    results_files_=make_table(results_files,"results_files")
     if n_clicks:
         selected_results_files, ids2labels=filter_samples(datasets=datasets,groups=groups, reps=None, cache=cache)    
-        pca_data=filter_gene_expression(ids2labels,None,None,cache)
+        pca_data=filter_gene_expression(results_files, ids2labels,None,None,cache)
         selected_sets=list(set(selected_results_files["Set"]))
         pca_plot, pca_pa, pca_df=make_pca_plot(pca_data,selected_sets[0])
 
@@ -903,8 +919,12 @@ def download_samples(n_clicks,datasets, groups, samples, fileprefix):
     prevent_initial_call=True,
 )
 def download_geneexp(n_clicks,datasets, groups, samples, genenames, geneids, fileprefix):
+    results_files=selected_results_files[["Set","Group","Reps"]]
+    results_files.columns=["Set","Group","Sample"]
+    results_files=results_files.drop_duplicates()      
+    results_files_=make_table(results_files,"results_files")
     selected_results_files, ids2labels=filter_samples(datasets=datasets,groups=groups, reps=samples, cache=cache)    
-    gene_expression=filter_gene_expression(ids2labels,genenames,geneids,cache)
+    gene_expression=filter_gene_expression(result_files, ids2labels,genenames,geneids,cache)
     fileprefix=secure_filename(str(fileprefix))
     filename="%s.gene_expression.xlsx" %fileprefix
     return dcc.send_data_frame(gene_expression.to_excel, filename, sheet_name="gene exp.", index=False)

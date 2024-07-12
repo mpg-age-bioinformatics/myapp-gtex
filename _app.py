@@ -10,10 +10,11 @@ from pyflaski.pca import figure_defaults as defaults_pca
 import plotly.express as px
 import plotly.graph_objects as go
 
+
 import numpy as np
 import re
-
-path_to_files="/flaski_private/aarnaseqlake/"
+#path_to_files="/flaski_private/aarnaseqlake/" 
+path_to_files="/flaski_private/aarnaseqlake/gtex/" 
 
 def read_results_files(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2) # 2 hours
@@ -22,18 +23,31 @@ def read_results_files(cache,path_to_files=path_to_files):
         return df.to_json()
     return pd.read_json(_read_results_files())
 
-def read_gene_expression(cache,path_to_files=path_to_files):
+def read_gene_expression(selectedfiles,cache,path_to_files=path_to_files):
     # @cache.memoize(60*60*2)
     # currently failing to read gene_expression with caching
-    def _read_gene_expression(path_to_files=path_to_files):
-        df=pd.read_csv(path_to_files+"gene_expression.tsv",sep="\t",index_col=[0])
+    def _read_gene_expression(selectedfiles, path_to_files=path_to_files):
+        selectedfiles=pd.DataFrame.drop_duplicates(selectedfiles)
+
+        df=pd.read_csv(path_to_files+str(selectedfiles.iloc[0,0]),sep="\t",index_col=[0])
+        for i in range (1,len(selectedfiles)):
+        #for i in range (1,5):
+            tempdf=pd.read_csv(path_to_files+str(selectedfiles.iloc[i,0]),sep="\t",index_col=[0])
+            df=pd.merge(df, tempdf, "outer")
+        newlist=[]
+        for i in range (len(df.columns.values)):
+            k: str=df.columns.values[i]
+            k=k.replace('.', '-')
+            newlist.append(k)
+        df.columns=newlist
+        df = df.loc[:,~df.columns.duplicated()].copy()
         return df.to_json()
-    return pd.read_json(_read_gene_expression())
+    return pd.read_json(_read_gene_expression(selectedfiles))
 
 def read_genes(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2)
     def _read_genes(path_to_files=path_to_files):
-        df=pd.read_csv(path_to_files+"genes-gtex.tsv",sep="\t")
+        df=pd.read_csv(path_to_files+"genes.tsv",sep="\t")
         return df.to_json()
     return pd.read_json(_read_genes())
 
@@ -90,10 +104,10 @@ def filter_genes(selected_gene_names, selected_gene_ids, cache):
         selected_genes=selected_genes[ selected_genes["gene_id"].isin(selected_gene_ids) ]
     return selected_genes
 
-def filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids, cache):
+def filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids, cache):
     @cache.memoize(60*60*2)
-    def _filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids):
-        gedf=read_gene_expression(cache)
+    def _filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids):
+        gedf=read_gene_expression(selectedfiles, cache)
         selected_genes=filter_genes(selected_gene_names, selected_gene_ids, cache)
         selected_ge=gedf[list(ids2labels.keys())]
         selected_ge=selected_ge.astype(float)
@@ -101,6 +115,7 @@ def filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids, c
         selected_ge["sum"]=selected_ge.sum(axis=1)
         selected_ge=selected_ge[selected_ge["sum"]>0]
         selected_ge=selected_ge.drop(["sum"],axis=1)
+        print(selected_genes)
         selected_ge=pd.merge(selected_genes, selected_ge, left_on=["name_id"], right_index=True,how="left")
         selected_ge=selected_ge.dropna(subset=cols,how="all")
         selected_ge=selected_ge.drop(["name_id"],axis=1)
@@ -112,8 +127,10 @@ def filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids, c
         rename=[ s.replace("_", " ")  for s in rename ]
         rename=selected_ge.columns.tolist()[:2]+rename
         selected_ge.columns=rename
+
+        print('filter gene expression')
         return selected_ge.to_json()
-    return pd.read_json(_filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids))
+    return pd.read_json(_filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids))
 
 def read_metadata(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2) # 2 hours
@@ -353,6 +370,7 @@ def make_bar_plot(df, cols_to_exclude,sets, label):
     
     def format_df(x1,x2):
         v=x1.split(x2)[1].rsplit(" ",1)[0]
+        print(v)
         return v
 
     if len(sets_) == 1 :
@@ -415,3 +433,5 @@ def make_bar_plot(df, cols_to_exclude,sets, label):
 
 
         
+
+        #/nexus/posix0/MAGE-flaski/service/hpc/group/Bioinformatics/bit_gtex_ageing/gtex_datalake
