@@ -89,7 +89,7 @@ services:
    - ./_vars.py:/myapp/myapp/routes/_vars.py
    - ./app.py:/myapp/myapp/routes/index.py
    - ./_app.py:/myapp/myapp/routes/_app.py
-   - /Users/fcourrede/aarnaseqlake:/flaski_private/aarnaseqlake
+   - ~/myapp-gtex-data:/flaski_private/gtex
   environment:
    - N_WORKERS=1
    - APP_NAME=myapp

@@ -9,12 +9,76 @@ from pyflaski.pca import make_figure as make_pca
 from pyflaski.pca import figure_defaults as defaults_pca
 import plotly.express as px
 import plotly.graph_objects as go
-
+import json
 
 import numpy as np
 import re
-#path_to_files="/flaski_private/aarnaseqlake/" 
-path_to_files="/flaski_private/aarnaseqlake/gtex/" 
+
+path_to_files="/flaski_private/gtex/"
+
+
+def read_menus(cache,path_to_files=path_to_files):
+    @cache.memoize(60*60*2) # 2 hours
+    def _read_menus(path_to_files=path_to_files):
+        with open(f"{path_to_files}/menus.json", 'r') as json1_file:
+            json1_str = json1_file.read()
+            json1_data = json.loads(json1_str)
+            return json1_data
+    return _read_menus()
+
+def read_data(cache, path_to_files=path_to_files):
+    @cache.memoize(60*60*2) 
+    def _read_data(path_to_files=path_to_files):
+        df=pd.read_csv(f"{path_to_files}/data.tsv",sep="\t")
+        return df.to_json()
+    return pd.read_json(_read_data())
+
+def read_significant(cache, path_to_files=path_to_files):
+    #@cache.memoize(60*60*2) 
+    def _read_significant(path_to_files=path_to_files):
+        df=pd.read_csv(f"{path_to_files}/sig.genes.tsv",sep="\t",dtype=str)
+        # print(1,df.head(10))
+        return df.to_json()
+    return pd.read_json(_read_significant())
+
+def gene_report(cache,gender,tissue,geneid,path_to_files=path_to_files):
+    #@cache.memoize(60*60*2) 
+    def _gene_report(gender,tissue,geneid,path_to_files=path_to_files):
+        genes=read_genes(cache)
+        gene_index=genes[genes["gene_id"]==geneid].index.tolist()[0]
+
+        metadata=pd.read_csv(f"{path_to_files}metadata.samples.tsv",sep="\t")
+
+        if gender[0] == "male" :
+            g=1
+        elif gender[0] == "female":
+            g=2
+
+        samples=metadata[ (metadata["SMTS"].isin(tissue) ) & (metadata["SEX"]==g) ]
+        samples_list=samples["SAMPID"].tolist()
+        samples_dic=dict(zip(samples_list, samples["friendly_name"].tolist() ) )
+
+        fileheader_size=2
+        table_header=1
+        skiprows=fileheader_size+table_header+gene_index
+        df_head=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=2, nrows=1, sep="\t", header=None)
+        df_head=pd.DataFrame(df_head.loc[0,])
+        # not all sample ids from counts seem to be on the tmp file (??) we therefore need the interception
+        header=[ s for s in ["Name","Description"]+samples_list  if s in df_head[0].tolist() ]
+        samples_index=df_head[ df_head[0].isin(header) ]
+        samples_index=samples_index.index.tolist()
+
+        df=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=skiprows, nrows=1, usecols=samples_index , names=header , sep="\t", header=None)
+        df=df.transpose()
+        df.reset_index(inplace=True, drop=False)
+        df=pd.merge(df, samples, left_on=["index"], right_on=["SAMPID"], how="left")
+
+        return df.to_json()
+    return pd.read_json(_gene_report(gender,tissue,geneid))
+
+
+    #     return {"samples":samples, "df":df}
+    # return _gene_report(gender,tissue,geneid)
 
 def read_results_files(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2) # 2 hours
@@ -23,26 +87,13 @@ def read_results_files(cache,path_to_files=path_to_files):
         return df.to_json()
     return pd.read_json(_read_results_files())
 
-def read_gene_expression(selectedfiles,cache,path_to_files=path_to_files):
+def read_gene_expression(cache,path_to_files=path_to_files):
     # @cache.memoize(60*60*2)
     # currently failing to read gene_expression with caching
-    def _read_gene_expression(selectedfiles, path_to_files=path_to_files):
-        selectedfiles=pd.DataFrame.drop_duplicates(selectedfiles)
-
-        df=pd.read_csv(path_to_files+str(selectedfiles.iloc[0,0]),sep="\t",index_col=[0])
-        for i in range (1,len(selectedfiles)):
-        #for i in range (1,5):
-            tempdf=pd.read_csv(path_to_files+str(selectedfiles.iloc[i,0]),sep="\t",index_col=[0])
-            df=pd.merge(df, tempdf, "outer")
-        newlist=[]
-        for i in range (len(df.columns.values)):
-            k: str=df.columns.values[i]
-            k=k.replace('.', '-')
-            newlist.append(k)
-        df.columns=newlist
-        df = df.loc[:,~df.columns.duplicated()].copy()
+    def _read_gene_expression(path_to_files=path_to_files):
+        df=pd.read_csv(path_to_files+"gene_expression.tsv",sep="\t",index_col=[0])
         return df.to_json()
-    return pd.read_json(_read_gene_expression(selectedfiles))
+    return pd.read_json(_read_gene_expression())
 
 def read_genes(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2)
@@ -50,7 +101,6 @@ def read_genes(cache,path_to_files=path_to_files):
         df=pd.read_csv(path_to_files+"genes.tsv",sep="\t")
         return df.to_json()
     return pd.read_json(_read_genes())
-
 
 def read_significant_genes(cache, path_to_files=path_to_files):
     @cache.memoize(60*60*2)
@@ -104,10 +154,10 @@ def filter_genes(selected_gene_names, selected_gene_ids, cache):
         selected_genes=selected_genes[ selected_genes["gene_id"].isin(selected_gene_ids) ]
     return selected_genes
 
-def filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids, cache):
+def filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids, cache):
     @cache.memoize(60*60*2)
-    def _filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids):
-        gedf=read_gene_expression(selectedfiles, cache)
+    def _filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids):
+        gedf=read_gene_expression(cache)
         selected_genes=filter_genes(selected_gene_names, selected_gene_ids, cache)
         selected_ge=gedf[list(ids2labels.keys())]
         selected_ge=selected_ge.astype(float)
@@ -115,7 +165,6 @@ def filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selec
         selected_ge["sum"]=selected_ge.sum(axis=1)
         selected_ge=selected_ge[selected_ge["sum"]>0]
         selected_ge=selected_ge.drop(["sum"],axis=1)
-        print(selected_genes)
         selected_ge=pd.merge(selected_genes, selected_ge, left_on=["name_id"], right_index=True,how="left")
         selected_ge=selected_ge.dropna(subset=cols,how="all")
         selected_ge=selected_ge.drop(["name_id"],axis=1)
@@ -127,10 +176,8 @@ def filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selec
         rename=[ s.replace("_", " ")  for s in rename ]
         rename=selected_ge.columns.tolist()[:2]+rename
         selected_ge.columns=rename
-
-        print('filter gene expression')
         return selected_ge.to_json()
-    return pd.read_json(_filter_gene_expression(selectedfiles, ids2labels, selected_gene_names, selected_gene_ids))
+    return pd.read_json(_filter_gene_expression(ids2labels, selected_gene_names, selected_gene_ids))
 
 def read_metadata(cache,path_to_files=path_to_files):
     @cache.memoize(60*60*2) # 2 hours
@@ -154,7 +201,7 @@ def read_dge(dataset, groups, cache,path_to_files=path_to_files):
         cols=selected_dge.columns.tolist()
         for c in cols[2:]:
             selected_dge[c]=selected_dge[c].apply(lambda x: nFormat(x) )
-        cols=[ s.replace("_", " ") for s in cols ]
+        # cols=[ s.replace("_", " ") for s in cols ]
         selected_dge.columns=cols
         samples_names=cols[2:-5]
         samples_names.sort()
@@ -215,10 +262,9 @@ def make_volcano_plot(df,dataset, annotate):
     pa["xlabel"]=fc
     pa["ylabel"]="-log10(p adj.)"
     pa["marker_alpha"]="0.5"
-    pa["labels_col_value"]="gene name"
+    pa["labels_col_value"]="gene_name"
     pa["fixed_labels"]=annotate
     pa["labels_alpha"]=1
-    
     fig=make_scatter(df_,pa)
 
     return fig, pa, df_
@@ -251,7 +297,7 @@ def make_ma_plot(df,dataset, annotate):
     pa["xlabel"]="log10(base mean)"
     pa["ylabel"]=fc #"-log10(p adj.)"
     pa["marker_alpha"]="0.5"
-    pa["labels_col_value"]="gene name"
+    pa["labels_col_value"]="gene_name"
     pa["fixed_labels"]=annotate
     pa["labels_alpha"]=1
 
@@ -370,7 +416,6 @@ def make_bar_plot(df, cols_to_exclude,sets, label):
     
     def format_df(x1,x2):
         v=x1.split(x2)[1].rsplit(" ",1)[0]
-        print(v)
         return v
 
     if len(sets_) == 1 :
@@ -434,4 +479,3 @@ def make_bar_plot(df, cols_to_exclude,sets, label):
 
         
 
-        #/nexus/posix0/MAGE-flaski/service/hpc/group/Bioinformatics/bit_gtex_ageing/gtex_datalake
