@@ -1,44 +1,21 @@
 from myapp import app, PAGE_PREFIX, PRIVATE_ROUTES
 from flask_login import current_user
 from flask_caching import Cache
-import plotly.graph_objects as go
-from flask import session, request
+from flask import session
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State, MATCH, ALL
-from dash.exceptions import PreventUpdate
 from myapp.routes._utils import META_TAGS, navbar_A, protect_dashviews, make_navbar_logged
 import dash_bootstrap_components as dbc
-from myapp.routes.apps._utils import parse_import_json, parse_table, make_options, make_except_toast, ask_for_help, save_session, load_session, make_table, encode_session_app
+from myapp.routes.apps._utils import make_options, encode_session_app
 import os
-import sys
 import uuid
-# import traceback
-import json
-import base64
-import pandas as pd
-# import time
 from werkzeug.utils import secure_filename
-import humanize
-from myapp.models import User
-import stat
-import fnmatch
-from datetime import datetime
-# import dash_table
-import shutil
 from time import sleep
 from myapp import db
 from myapp.models import UserLogging, PrivateRoutes
-from ._app import read_menus, read_data, read_significant,  read_genes, gene_report, read_results_files, read_gene_expression, read_significant_genes, \
-    filter_samples, filter_genes, filter_gene_expression, nFormat, read_dge,\
-        make_volcano_plot, make_ma_plot, make_pca_plot, make_annotated_col, make_bar_plot, plot_height
-
-from pyflaski.violinplot import make_figure, figure_defaults
-
-        
-PYFLASKI_VERSION=os.environ['PYFLASKI_VERSION']
-PYFLASKI_VERSION=str(PYFLASKI_VERSION)
-
+from ._app import read_menus,read_genes, get_tables
+from pyflaski.violinplot import make_figure
 
 FONT_AWESOME = "https://use.fontawesome.com/releases/v5.7.2/css/all.css"
 
@@ -63,113 +40,6 @@ elif app.config["CACHE_TYPE"] == "RedisSentinelCache" :
         ],
         'CACHE_REDIS_SENTINEL_MASTER': os.environ.get('CACHE_REDIS_SENTINEL_MASTER')
     })
-
-def change_table_minWidth(tb,minwidth):
-    st=tb.style_table
-    st["minWidth"]=minwidth
-    tb.style_table=st
-    return tb
-
-def change_fig_minWidth(fig,minwidth):
-    st=fig.style
-    st["minWidth"]=minwidth
-    fig.style=st
-    return fig
-
-def get_tables(cache,genders,tissues,groups,genenames,geneids):
-    genes=read_genes(cache)
-    data=read_data(cache)
-    sigdf_=read_significant(cache)
-    sigdf=sigdf_.drop(["file"],axis=1)
-
-    if genders:
-        data=data[data["gender"].isin(genders)]
-        sigdf=sigdf[sigdf["gender"].isin(genders)]
-        lgenders=len(genders)
-    else:
-        lgenders=0
-
-    if tissues:
-        data=data[data["tissue"].isin(tissues)]
-        sigdf=sigdf[sigdf["tissue"].isin(tissues)]
-        ltissues=len(tissues)
-    else:
-        ltissues=0
-
-    if groups:
-        data=data[ ( data["group_1"].isin(groups) ) | ( data["group_2"].isin(groups) )  ]
-        sigdf=sigdf[ ( sigdf["group_1"].isin(groups) ) | ( sigdf["group_2"].isin(groups) )  ]
-
-    if genenames or geneids :
-        
-        if genenames :
-            lgenenames=len(genenames)
-            sigdf_=sigdf[ ( sigdf["gene_name"].isin(genenames) ) ]
-            genes_=genes[ ( genes["gene_name"].isin(genenames) ) ]
-        else:
-            lgenenames=0
-            sigdf_=pd.DataFrame()
-            genes_=pd.DataFrame()
-
-        if geneids :
-            lgeneids=len(geneids)
-            sigdf__=sigdf[ ( sigdf["gene_id"].isin(geneids) ) ]
-            genes__=genes[ ( genes["gene_id"].isin(geneids) ) ]
-    
-        else:
-            lgeneids=0
-            sigdf__=pd.DataFrame()
-            genes__=pd.DataFrame()
-
-        sigdf=pd.concat( [sigdf_, sigdf__ ] )
-        sigdf=sigdf.drop_duplicates()
-
-        genes=pd.concat( [genes_, genes__ ] )
-        genes=genes.drop_duplicates()
-
-    else:
-        lgenenames=0
-        lgeneids=0
-
-    data=make_table(data,"data")
-    sigdf=make_table(sigdf,"sigdf")
-
-    if ( lgenders == 1 ) and ( ltissues == 1 ) and ( (lgenenames ==1 ) or (lgeneids == 1) ) :
-
-        geneid=genes["gene_id"].tolist()[0]
-        df=gene_report(cache, genders,tissues,geneid)
-        df=df[["SAMPID","AGE","0","DTHHRDY", "SEX", "SMTS","SMTSD"]]
-        df=df[2:]
-        df["0"]=df["0"].astype(float)
-        df=df.rename(columns={"0":"TPM"})
-        df=df.sort_values(by=["AGE","SMTSD"],ascending=True)
-
-        pa=figure_defaults()
-        # session_file={"filename":"<from.gtex.app>", "last_modified":)}
-
-        gene_name=genes["gene_name"].tolist()[0]
-        gender=genders[0]
-        tissue=tissues[0]
-
-        pa["style"]="Violinplot and Swarmplot"
-        pa['title']=f'{gene_name}, {tissue}, {gender}'
-        pa["x_val"]="AGE"
-        pa["y_val"]="TPM"
-        pa["vals"]=[None]+df.columns.tolist()
-        pa["xlabel"]="AGE"
-        pa["ylabel"]="TPM"      
-
-        session_data={ "session_data": {"app": { "violinplot": {"filename":"<from.gtex.app>" ,'last_modified':datetime.timestamp( datetime.now()),"df":df.to_json(),"pa":pa} } } }
-        session_data["APP_VERSION"]=app.config['APP_VERSION']
-        session_data["PYFLASKI_VERSION"]=PYFLASKI_VERSION
-
-    else:
-
-        df=None
-        pa=None
-        session_data=None
-
-    return data, sigdf, df, pa, session_data
 
 dashapp.layout=html.Div( 
     [ 
@@ -311,63 +181,6 @@ def update_menus(session_id):
 )
 def update_output(session_id, n_clicks, genders, tissues, groups, genenames, geneids, download_name):
 
-    # genes=read_genes(cache)
-    # data=read_data(cache)
-    # sigdf_=read_significant(cache)
-    # sigdf=sigdf_.drop(["file"],axis=1)
-
-    # if genders:
-    #     data=data[data["gender"].isin(genders)]
-    #     sigdf=sigdf[sigdf["gender"].isin(genders)]
-    #     lgenders=len(genders)
-    # else:
-    #     lgenders=0
-
-    # if tissues:
-    #     data=data[data["tissue"].isin(tissues)]
-    #     sigdf=sigdf[sigdf["tissue"].isin(tissues)]
-    #     ltissues=len(tissues)
-    # else:
-    #     ltissues=0
-
-    # if groups:
-    #     data=data[ ( data["group_1"].isin(groups) ) | ( data["group_2"].isin(groups) )  ]
-    #     sigdf=sigdf[ ( sigdf["group_1"].isin(groups) ) | ( sigdf["group_2"].isin(groups) )  ]
-
-    # if genenames or geneids :
-        
-    #     if genenames :
-    #         lgenenames=len(genenames)
-    #         sigdf_=sigdf[ ( sigdf["gene_name"].isin(genenames) ) ]
-    #         genes_=genes[ ( genes["gene_name"].isin(genenames) ) ]
-    #     else:
-    #         lgenenames=0
-    #         sigdf_=pd.DataFrame()
-    #         genes_=pd.DataFrame()
-
-    #     if geneids :
-    #         lgeneids=len(geneids)
-    #         sigdf__=sigdf[ ( sigdf["gene_id"].isin(geneids) ) ]
-    #         genes__=genes[ ( genes["gene_id"].isin(geneids) ) ]
-    
-    #     else:
-    #         lgeneids=0
-    #         sigdf__=pd.DataFrame()
-    #         genes__=pd.DataFrame()
-
-    #     sigdf=pd.concat( [sigdf_, sigdf__ ] )
-    #     sigdf=sigdf.drop_duplicates()
-
-    #     genes=pd.concat( [genes_, genes__ ] )
-    #     genes=genes.drop_duplicates()
-
-    # else:
-    #     lgenenames=0
-    #     lgeneids=0
-
-    # data=make_table(data,"data")
-    # sigdf=make_table(sigdf,"sigdf")
-
     swarmplot=[
         html.Div(
             [
@@ -405,40 +218,9 @@ def update_output(session_id, n_clicks, genders, tissues, groups, genenames, gen
     ## if only one gender, one tissue and one gene render a swarm plot of fpkms/tmps (as supplied by gtex)
     ## https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct.gz
 
-    # print(lgenders,ltissues,lgenenames,lgeneids)
-    # print(( lgenders == 1 ) and ( ltissues == 1 ) and ( (lgenenames ==1 ) or (lgeneids == 1) ))
-
     data, sigdf, df, pa, session_data = get_tables(cache,genders,tissues,groups,genenames,geneids)
 
-    # if ( lgenders == 1 ) and ( ltissues == 1 ) and ( (lgenenames ==1 ) or (lgeneids == 1) ):
     if pa:
-
-        # geneid=genes["gene_id"].tolist()[0]
-        # df=gene_report(cache, genders,tissues,geneid)
-        # df=df[["SAMPID","AGE","0","DTHHRDY", "SEX", "SMTS","SMTSD"]]
-        # df=df[2:]
-        # df["0"]=df["0"].astype(float)
-        # df=df.rename(columns={"0":"TPM"})
-        # df=df.sort_values(by=["AGE","SMTSD"],ascending=True)
-
-        # pa=figure_defaults()
-        # session_file={"filename":"<from.gtex.app>", "last_modified":)}
-
-        # gene_name=genes["gene_name"].tolist()[0]
-        # gender=genders[0]
-        # tissue=tissues[0]
-
-        # pa["style"]="Violinplot and Swarmplot"
-        # pa['title']=f'{gene_name}, {tissue}, {gender}'
-        # pa["x_val"]="AGE"
-        # pa["y_val"]="TPM"
-        # pa["vals"]=[None]+df.columns.tolist()
-        # pa["xlabel"]="AGE"
-        # pa["ylabel"]="TPM"      
-
-        # session_data={ "session_data": {"app": { "violinplot": {"filename":"<from.gtex.app>" ,'last_modified':datetime.timestamp( datetime.now()),"df":df.to_json(),"pa":pa} } } }
-        # session_data["APP_VERSION"]=app.config['APP_VERSION']
-        # session_data["PYFLASKI_VERSION"]=PYFLASKI_VERSION
 
         fig=make_figure(df,pa)
         fig_config={ 'modeBarButtonsToRemove':["toImage"], 'displaylogo': False}
@@ -527,32 +309,6 @@ def download_values(n_clicks,genders, tissues, groups, genenames, geneids, downl
 
     data, sigdf, df, pa, session_data =get_tables(cache,genders,tissues,groups,genenames,geneids)
 
-    # genes=read_genes(cache)
-
-    # if genenames or geneids :
-        
-    #     if genenames :
-    #         genes_=genes[ ( genes["gene_name"].isin(genenames) ) ]
-    #     else:
-    #         genes_=pd.DataFrame()
-
-    #     if geneids :
-    #         genes__=genes[ ( genes["gene_id"].isin(geneids) ) ]
-    
-    #     else:
-    #         genes__=pd.DataFrame()
-
-    #     genes=pd.concat( [genes_, genes__ ] )
-    #     genes=genes.drop_duplicates()
-
-    # geneid=genes["gene_id"].tolist()[0]
-    # df=gene_report(cache, genders,tissues,geneid)
-    # df=df[["SAMPID","AGE","0","DTHHRDY", "SEX", "SMTS","SMTSD"]]
-    # df=df[2:]
-    # df["0"]=df["0"].astype(float)
-    # df=df.rename(columns={"0":"TPM"})
-    # df=df.sort_values(by=["AGE","SMTSD"],ascending=True)
-
     fileprefix=secure_filename(str(download_name))
     filename="%s.xlsx" %fileprefix
     return dcc.send_data_frame(df.to_excel, filename, sheet_name="gtex", index=False)
@@ -571,98 +327,12 @@ def to_violin_app(n_clicks, genders, tissues, groups, genenames, geneids):
 
         data, sigdf, df, pa, session_data =get_tables(cache,genders,tissues,groups,genenames,geneids)
 
-        # genes=read_genes(cache)
-        # data=read_data(cache)
-        # sigdf_=read_significant(cache)
-        # sigdf=sigdf_.drop(["file"],axis=1)
-
-        # if genders:
-        #     data=data[data["gender"].isin(genders)]
-        #     sigdf=sigdf[sigdf["gender"].isin(genders)]
-        #     lgenders=len(genders)
-        # else:
-        #     lgenders=0
-
-        # if tissues:
-        #     data=data[data["tissue"].isin(tissues)]
-        #     sigdf=sigdf[sigdf["tissue"].isin(tissues)]
-        #     ltissues=len(tissues)
-        # else:
-        #     ltissues=0
-
-        # if groups:
-        #     data=data[ ( data["group_1"].isin(groups) ) | ( data["group_2"].isin(groups) )  ]
-        #     sigdf=sigdf[ ( sigdf["group_1"].isin(groups) ) | ( sigdf["group_2"].isin(groups) )  ]
-
-        # if genenames or geneids :
-            
-        #     if genenames :
-        #         lgenenames=len(genenames)
-        #         sigdf_=sigdf[ ( sigdf["gene_name"].isin(genenames) ) ]
-        #         genes_=genes[ ( genes["gene_name"].isin(genenames) ) ]
-        #     else:
-        #         lgenenames=0
-        #         sigdf_=pd.DataFrame()
-        #         genes_=pd.DataFrame()
-
-        #     if geneids :
-        #         lgeneids=len(geneids)
-        #         sigdf__=sigdf[ ( sigdf["gene_id"].isin(geneids) ) ]
-        #         genes__=genes[ ( genes["gene_id"].isin(geneids) ) ]
-        
-        #     else:
-        #         lgeneids=0
-        #         sigdf__=pd.DataFrame()
-        #         genes__=pd.DataFrame()
-
-        #     sigdf=pd.concat( [sigdf_, sigdf__ ] )
-        #     sigdf=sigdf.drop_duplicates()
-
-        #     genes=pd.concat( [genes_, genes__ ] )
-        #     genes=genes.drop_duplicates()
-
-        # else:
-        #     lgenenames=0
-        #     lgeneids=0
-
-        # data=make_table(data,"data")
-        # sigdf=make_table(sigdf,"sigdf")
-
-        # geneid=genes["gene_id"].tolist()[0]
-        # df=gene_report(cache, genders,tissues,geneid)
-        # df=df[["SAMPID","AGE","0","DTHHRDY", "SEX", "SMTS","SMTSD"]]
-        # df=df[2:]
-        # df["0"]=df["0"].astype(float)
-        # df=df.rename(columns={"0":"TPM"})
-        # df=df.sort_values(by=["AGE","SMTSD"],ascending=True)
-
-        # pa=figure_defaults()
-        # session_file={"filename":"<from.gtex.app>", "last_modified":)}
-
-        # gene_name=genes["gene_name"].tolist()[0]
-        # gender=genders[0]
-        # tissue=tissues[0]
-
-        # pa["style"]="Violinplot and Swarmplot"
-        # pa['title']=f'{gene_name}, {tissue}, {gender}'
-        # pa["x_val"]="AGE"
-        # pa["y_val"]="TPM"
-        # pa["vals"]=[None]+df.columns.tolist()
-        # pa["xlabel"]="AGE"
-        # pa["ylabel"]="TPM"      
-
-        # session_data={ "session_data": {"app": { "violinplot": {"filename":"<from.gtex.app>" ,'last_modified':datetime.timestamp( datetime.now()),"df":df.to_json(),"pa":pa} } } }
-        # session_data["APP_VERSION"]=app.config['APP_VERSION']
-        # session_data["PYFLASKI_VERSION"]=PYFLASKI_VERSION
-                        
         session_data=encode_session_app(session_data)
         session["session_data"]=session_data
 
-        from time import sleep
         sleep(2)
 
         return dcc.Location(pathname=f"{PAGE_PREFIX}/violinplot/", id="index")
-
 
 
 @dashapp.callback(
