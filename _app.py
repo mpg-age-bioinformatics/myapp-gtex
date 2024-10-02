@@ -37,8 +37,10 @@ def read_significant(cache, path_to_files=path_to_files):
 def gene_report(cache,gender,tissue,geneid,path_to_files=path_to_files):
     @cache.memoize(60*60*2) 
     def _gene_report(gender,tissue,geneid,path_to_files=path_to_files):
-        genes=read_genes(cache)
-        gene_index=genes[genes["gene_id"]==geneid].index.tolist()[0]
+        # genes=read_genes(cache)
+        # gene_index=genes[genes["gene_id"]==geneid].index.tolist()[0]
+
+
 
         metadata=pd.read_csv(f"{path_to_files}metadata.samples.tsv",sep="\t")
 
@@ -50,6 +52,30 @@ def gene_report(cache,gender,tissue,geneid,path_to_files=path_to_files):
         samples=metadata[ (metadata["SMTS"].isin(tissue) ) & (metadata["SEX"]==g) ]
         samples_list=samples["SAMPID"].tolist()
         samples_dic=dict(zip(samples_list, samples["friendly_name"].tolist() ) )
+
+        tissue_=tissue[0]
+        norm_counts_file=f"{path_to_files}{gender}_{tissue_}.tissue.counts.tsv.deseq2.normcounts.tsv"
+
+        genes=pd.read_csv(norm_counts_file, sep="\t", usecols=[0])
+        gene_index=genes[genes[0]==geneid].index.tolist()[0]
+
+
+
+        # fileheader_size=0
+        # table_header=1
+        # skiprows=fileheader_size+table_header+gene_index
+        # df_head=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=2, nrows=1, sep="\t", header=None)
+        # df_head=pd.DataFrame(df_head.loc[0,])
+        # # not all sample ids from counts seem to be on the tmp file (??) we therefore need the interception
+        # header=[ s for s in ["Name","Description"]+samples_list  if s in df_head[0].tolist() ]
+        # samples_index=df_head[ df_head[0].isin(header) ]
+        # samples_index=samples_index.index.tolist()
+
+        # df=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=skiprows, nrows=1, usecols=samples_index , names=header , sep="\t", header=None)
+        # df=df.transpose()
+        # df.reset_index(inplace=True, drop=False)
+        # df=pd.merge(df, samples, left_on=["index"], right_on=["SAMPID"], how="left")
+
 
         fileheader_size=2
         table_header=1
