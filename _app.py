@@ -31,16 +31,13 @@ def read_significant(cache, path_to_files=path_to_files):
     @cache.memoize(60*60*2) 
     def _read_significant(path_to_files=path_to_files):
         df=pd.read_csv(f"{path_to_files}/sig.genes.tsv",sep="\t",dtype=str)
+        df=df.rename(columns={"log2FoldChange":"log2(group_2/group_1)"})
         return df.to_json()
     return pd.read_json(_read_significant())
 
 def gene_report(cache,gender,tissue,geneid,path_to_files=path_to_files):
     @cache.memoize(60*60*2) 
     def _gene_report(gender,tissue,geneid,path_to_files=path_to_files):
-        # genes=read_genes(cache)
-        # gene_index=genes[genes["gene_id"]==geneid].index.tolist()[0]
-
-
 
         metadata=pd.read_csv(f"{path_to_files}metadata.samples.tsv",sep="\t")
 
@@ -54,43 +51,56 @@ def gene_report(cache,gender,tissue,geneid,path_to_files=path_to_files):
         samples_dic=dict(zip(samples_list, samples["friendly_name"].tolist() ) )
 
         tissue_=tissue[0]
-        norm_counts_file=f"{path_to_files}{gender}_{tissue_}.tissue.counts.tsv.deseq2.normcounts.tsv"
+        gender_=gender[0]
+        norm_counts_file=f"{path_to_files}{gender_}_{tissue_}.tissue.counts.tsv.deseq2.normcounts.tsv"
 
+        ## Normcounts approach
         genes=pd.read_csv(norm_counts_file, sep="\t", usecols=[0])
-        gene_index=genes[genes[0]==geneid].index.tolist()[0]
+        gene_index=genes.index.tolist()
+        gene_index=gene_index.index(geneid)
+
+        fileheader_size=0
+        table_header=1
+        skiprows=fileheader_size+table_header+gene_index
+
+        df_head=pd.read_csv( norm_counts_file, nrows=1, sep="\t", header=None)
+        df_head=pd.DataFrame(df_head.loc[0,])
+        df_head_samples=df_head[0].tolist()
+        # not all sample ids from counts seem to be on the tmp file (??) we therefore need the interception
+        samples_list_=[ s.replace("-",".") for s in samples_list ]
+  
+        header=[ s for s in samples_list_  if s in df_head_samples ]
+        df_head=df_head[ df_head[0].isin(header) ]
+        header=df_head[0].tolist()
+        header=[ s.replace(".","-") for s in header ]
+        samples_index=df_head.index.tolist()
+
+        df=pd.read_csv( norm_counts_file, skiprows=skiprows, nrows=1, usecols=[0]+samples_index , names=["Name"]+header , sep="\t", header=None)
+        df=df.transpose()
+        df.reset_index(inplace=True, drop=False)
+        df=pd.merge(df, samples, left_on=["index"], right_on=["SAMPID"], how="left")
 
 
+        ## TPM approach
 
-        # fileheader_size=0
+        # genes=read_genes(cache)
+        # gene_index=genes[genes["gene_id"]==geneid].index.tolist()[0]
+
+        # fileheader_size=2
         # table_header=1
         # skiprows=fileheader_size+table_header+gene_index
         # df_head=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=2, nrows=1, sep="\t", header=None)
         # df_head=pd.DataFrame(df_head.loc[0,])
         # # not all sample ids from counts seem to be on the tmp file (??) we therefore need the interception
         # header=[ s for s in ["Name","Description"]+samples_list  if s in df_head[0].tolist() ]
-        # samples_index=df_head[ df_head[0].isin(header) ]
-        # samples_index=samples_index.index.tolist()
+        # df_head=df_head[ df_head[0].isin(header) ]
+        # header=df_head[0].tolist()
+        # samples_index=df_head.index.tolist()
 
         # df=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=skiprows, nrows=1, usecols=samples_index , names=header , sep="\t", header=None)
         # df=df.transpose()
         # df.reset_index(inplace=True, drop=False)
         # df=pd.merge(df, samples, left_on=["index"], right_on=["SAMPID"], how="left")
-
-
-        fileheader_size=2
-        table_header=1
-        skiprows=fileheader_size+table_header+gene_index
-        df_head=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=2, nrows=1, sep="\t", header=None)
-        df_head=pd.DataFrame(df_head.loc[0,])
-        # not all sample ids from counts seem to be on the tmp file (??) we therefore need the interception
-        header=[ s for s in ["Name","Description"]+samples_list  if s in df_head[0].tolist() ]
-        samples_index=df_head[ df_head[0].isin(header) ]
-        samples_index=samples_index.index.tolist()
-
-        df=pd.read_csv( f"{path_to_files}GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct", skiprows=skiprows, nrows=1, usecols=samples_index , names=header , sep="\t", header=None)
-        df=df.transpose()
-        df.reset_index(inplace=True, drop=False)
-        df=pd.merge(df, samples, left_on=["index"], right_on=["SAMPID"], how="left")
 
         return df.to_json()
     return pd.read_json(_gene_report(gender,tissue,geneid))
@@ -187,7 +197,7 @@ def get_tables(cache,genders,tissues,groups,genenames,geneids):
         df=df[["SAMPID","AGE","0","DTHHRDY", "SEX", "SMTS","SMTSD"]]
         df=df[2:]
         df["0"]=df["0"].astype(float)
-        df=df.rename(columns={"0":"TPM"})
+        df=df.rename(columns={"0":"Normalized counts"})
         df=df.sort_values(by=["AGE","SMTSD"],ascending=True)
 
         pa=figure_defaults()
@@ -199,10 +209,10 @@ def get_tables(cache,genders,tissues,groups,genenames,geneids):
         pa["style"]="Violinplot and Swarmplot"
         pa['title']=f'{gene_name}, {tissue}, {gender}'
         pa["x_val"]="AGE"
-        pa["y_val"]="TPM"
+        pa["y_val"]="Normalized counts"
         pa["vals"]=[None]+df.columns.tolist()
         pa["xlabel"]="AGE"
-        pa["ylabel"]="TPM"      
+        pa["ylabel"]="Normalized counts"    
 
         session_data={ "session_data": {"app": { "violinplot": {"filename":"<from.gtex.app>" ,'last_modified':datetime.timestamp( datetime.now()),"df":df.to_json(),"pa":pa} } } }
         session_data["APP_VERSION"]=app.config['APP_VERSION']

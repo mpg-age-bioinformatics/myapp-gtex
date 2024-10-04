@@ -247,7 +247,15 @@ def update_output(session_id, n_clicks, genders, tissues, groups, genenames, gen
             style={'display': 'inline-block'}
         )
 
-        message="Specific tissue information can be found on the original data. Please consider downloading the values and/or investigating the SMTSD column on the violin plot to understand the distribution of the different tissues."
+        message=dcc.Markdown(
+            """
+                **Normalized counts**: DESeq2’s median of ratios. Counts divided by sample-specific size factors determined by median ratio \
+                of gene counts relative to geometric mean per gene. Ideal for gene count comparisons between samples and for DE analysis; \
+                NOT for within sample comparisons. Ref.: https://hbctraining.github.io/DGE_workshop_salmon/lessons/02_DGE_count_normalization.html\n\n\
+                **Specific tissue information** can be found on the original data. Please consider downloading the values and/or investigating \
+                the SMTSD column on the violin plot to understand the distribution of the different tissues.
+            """ 
+        )
 
         swarmplot=[fig, message, html.Div( [download_bar, send_to_violinplot]) ]
 
